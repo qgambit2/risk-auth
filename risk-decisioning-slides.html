@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Payments Risk Decisioning at Intuit</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink: #1a2332; --sub: #4a5568; --accent: #1d4ed8; --accent2: #0e7490;
+    --line: #cbd5e1; --card: #f8fafc; --gold: #b45309;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #e2e8f0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+  .slide {
+    display: none; width: 100%; max-width: 1200px; aspect-ratio: 16 / 9;
+    margin: 2vh auto; background: #fff; border: 1px solid var(--line);
+    box-shadow: 0 4px 24px rgba(15,23,42,.12); padding: 44px 56px;
+    flex-direction: column;
+  }
+  .slide.active { display: flex; }
+  .kicker { font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
+  h1 { font-size: 40px; line-height: 1.15; margin-bottom: 6px; }
+  h2 { font-size: 32px; margin-bottom: 18px; }
+  .sub { font-size: 19px; color: var(--sub); margin-bottom: 26px; }
+  .badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 18px 0 26px; }
+  .badge { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); padding: 14px 20px; }
+  .badge b { display: block; font-size: 26px; }
+  .badge span { font-size: 14.5px; color: var(--sub); }
+  ul.plain { list-style: none; font-size: 19px; line-height: 1.55; }
+  ul.plain li { padding: 7px 0 7px 26px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 4px; top: 16px; width: 9px; height: 9px; background: var(--accent); border-radius: 2px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 6px; }
+  .col { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--accent2); padding: 14px 18px; }
+  .col h3 { font-size: 19px; margin-bottom: 10px; }
+  .col p { font-size: 15.5px; line-height: 1.5; color: var(--sub); }
+  .col p b { color: var(--ink); }
+  ul.colist { list-style: none; }
+  ul.colist li { font-size: 14px; line-height: 1.36; color: var(--sub); padding: 4px 0 4px 16px; position: relative; }
+  ul.colist li::before { content: ""; position: absolute; left: 0; top: 13px; width: 7px; height: 7px; background: var(--accent2); border-radius: 2px; }
+  ul.colist li b { color: var(--ink); }
+  .outcomes { margin-top: 14px; background: #fffbeb; border: 1px solid #fcd34d; padding: 10px 18px; font-size: 16px; }
+  .foot { margin-top: auto; font-size: 14px; color: var(--sub); display: flex; justify-content: space-between; }
+  svg text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .diagramwrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  .hint { position: fixed; bottom: 10px; right: 16px; font-size: 12.5px; color: #64748b; }
+  .nav { position: fixed; bottom: 10px; left: 16px; display: flex; gap: 10px; align-items: center; font-size: 14px; color: #334155; }
+  .nav button { font: inherit; padding: 6px 14px; border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; }
+  .nav button:hover { background: var(--card); }
+  @media print { .nav { display: none; } }
+  @media print {
+    body { background: #fff; }
+    .slide { display: flex !important; page-break-after: always; box-shadow: none; margin: 0 auto; border: none; aspect-ratio: auto; height: 100vh; }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1 -->
+<section class="slide active">
+  <div class="kicker">Systems Design | Eugene Bendersky</div>
+  <h1>Real-Time Payments Risk Decisioning at Intuit</h1>
+  <p class="sub">Deciding, during payment authorization, whether each transaction proceeds, is blocked, or goes to human review. Owned as tech lead (4 engineers) on the payments risk team.</p>
+  <div class="badges">
+    <div class="badge"><b>300M+</b><span>transactions decisioned per year</span></div>
+    <div class="badge"><b>$300B+</b><span>annual payment value on the platform</span></div>
+    <div class="badge"><b>$5B+/yr</b><span>fraud losses prevented (system contribution)</span></div>
+    <div class="badge"><b>Hard SLA</b><span>verdict inside the authorization budget</span></div>
+  </div>
+  <ul class="plain">
+    <li><b>The problem:</b> fraud decisions need 100+ data points and rich rules, but the payment platform gives risk a fixed slice of the authorization budget. Accuracy and latency pull in opposite directions.</li>
+    <li><b>The users:</b> the payment platform calling in-line, risk analysts authoring rules that must ship same-day, and fraud operations working the ambiguous middle.</li>
+  </ul>
+  <div class="foot"><span>US Patent 11,869,008: ML plus configurable rules for payment fraud scoring (co-inventor)</span><span>1 / 3</span></div>
+</section>
+
+<!-- SLIDE 2 -->
+<section class="slide">
+  <h2>Architecture: one transaction through the system</h2>
+  <div class="diagramwrap">
+  <svg viewBox="0 0 1250 716" style="width:100%;height:100%">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 9 5 L 0 9 z" fill="#475569"/>
+      </marker>
+    </defs>
+
+    <!-- PayAuth -->
+    <!-- legend -->
+    <rect x="884" y="14" width="10" height="10" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/><text x="899" y="23" font-size="11" fill="#334155">Risk team services</text>
+    <rect x="1000" y="14" width="10" height="10" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><text x="1015" y="23" font-size="11" fill="#334155">Other teams, vendors</text>
+    <rect x="884" y="32" width="10" height="10" fill="#e2e8f0" stroke="#334155" stroke-width="1.5"/><text x="899" y="41" font-size="11" fill="#334155">Store</text>
+    <rect x="1000" y="32" width="10" height="10" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/><text x="1015" y="41" font-size="11" fill="#334155">Messaging</text>
+    <!-- Payment processors: the step after risk; they can still decline -->
+    <rect x="10" y="14" width="190" height="78" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+    <text x="105" y="38" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a2332">PAYMENT PROCESSORS</text>
+    <text x="105" y="57" text-anchor="middle" font-size="12" fill="#475569">Shift4, AMEX, PayPal, Adyen</text>
+    <text x="105" y="75" text-anchor="middle" font-size="11.5" fill="#475569">can still decline what risk approved</text>
+    <line x1="105" y1="120" x2="105" y2="96" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+    <text x="118" y="112" font-size="11.5" fill="#475569">then authorize</text>
+
+    <rect x="20" y="120" width="170" height="110" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+    <text x="105" y="155" text-anchor="middle" font-size="17" font-weight="700" fill="#1a2332">PayAuth</text>
+    <text x="105" y="177" text-anchor="middle" font-size="13" fill="#475569">payment platform</text>
+    <text x="105" y="196" text-anchor="middle" font-size="13" fill="#475569">card, eCheck, PayPal</text>
+    <text x="105" y="215" text-anchor="middle" font-size="13" fill="#475569">wallets</text>
+
+    <!-- Outcome feed: PayAuth publishes the processor result to SNS; Risk Data Tools writes it into the decision record -->
+    <path d="M 20 222 L 14 222 Q 8 222 8 228 L 8 556 Q 8 562 14 562 L 22 562" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+    <rect x="24" y="540" width="222" height="44" rx="9" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+    <text x="135" y="558" text-anchor="middle" font-size="13" font-weight="700" fill="#78350f">SNS TOPIC, SQS QUEUES</text>
+    <text x="135" y="574" text-anchor="middle" font-size="11.5" fill="#92400e">processor outcome, approve or decline</text>
+    <line x1="135" y1="540" x2="135" y2="510" stroke="#b45309" stroke-width="2" marker-end="url(#a)"/>
+    <path d="M 135 584 L 135 670 Q 135 676 141 676 L 979 676 Q 985 676 985 670 L 985 656" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+    <text x="760" y="688" font-size="11" fill="#92400e">same SNS outcome topic</text>
+    <text x="22" y="248" font-size="11.5" fill="#92400e">outcome to SNS</text>
+    <rect x="24" y="436" width="222" height="70" rx="9" fill="#ecfeff" stroke="#0e7490" stroke-width="2"/>
+    <text x="135" y="459" text-anchor="middle" font-size="14" font-weight="700" fill="#155e75">RISK DATA TOOLS (RDT)</text>
+    <text x="135" y="477" text-anchor="middle" font-size="12" fill="#155e75">reads its SQS queue, writes the outcome</text>
+    <text x="135" y="492" text-anchor="middle" font-size="12" fill="#155e75">into the DynamoDB decision record</text>
+    <path d="M 246 486 L 844 486 Q 850 486 850 480 L 850 310 Q 850 304 856 304 L 876 304" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+    <text x="254" y="481" font-size="11" fill="#334155">RDT writes the outcome</text>
+
+    <line x1="190" y1="160" x2="268" y2="160" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+    <text x="229" y="148" text-anchor="middle" font-size="12.5" fill="#475569">risk?</text>
+    <line x1="268" y1="205" x2="190" y2="205" stroke="#0e7490" stroke-width="2.5" marker-end="url(#a)"/>
+    <text x="229" y="224" text-anchor="middle" font-size="12.5" fill="#0e7490">verdict,</text>
+    <text x="229" y="240" text-anchor="middle" font-size="12.5" fill="#0e7490">in SLA</text>
+
+    <!-- Model scoring service: one of the data layer's sources -->
+    <rect x="20" y="262" width="226" height="70" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+    <text x="133" y="284" text-anchor="middle" font-size="14" font-weight="700" fill="#1a2332">MODEL SCORING SERVICE</text>
+    <text x="133" y="301" text-anchor="middle" font-size="12" fill="#475569">input: merchant key + transaction fields;</text>
+    <text x="133" y="315" text-anchor="middle" font-size="12" fill="#475569">own per-merchant aggregates;</text>
+    <text x="133" y="328" text-anchor="middle" font-size="12" fill="#475569">models trained on outcome data</text>
+    <line x1="296" y1="297" x2="246" y2="297" stroke="#64748b" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+
+    <!-- Nighthawk: partner service over the partner's aggregates store, called by the data layer like the model scoring service -->
+    <rect x="20" y="340" width="226" height="58" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+    <text x="133" y="359" text-anchor="middle" font-size="14" font-weight="700" fill="#1a2332">NIGHTHAWK (partner service)</text>
+    <text x="133" y="376" text-anchor="middle" font-size="12" fill="#475569">serves long-running aggregates from</text>
+    <text x="133" y="390" text-anchor="middle" font-size="12" fill="#475569">partner DynamoDB, other AWS account</text>
+    <line x1="296" y1="356" x2="246" y2="356" stroke="#64748b" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+
+    <path d="M 20 388 L 6 388 Q 2 388 2 392 L 2 692 Q 2 696 6 696 L 1184 696 Q 1188 696 1188 692 L 1188 656" fill="none" stroke="#334155" stroke-width="1.6" stroke-dasharray="4 5" marker-end="url(#a)"/>
+    <text x="1000" y="692" font-size="11" fill="#334155">Nighthawk reads the partner store</text>
+
+    <!-- Risk decision service -->
+    <rect x="272" y="40" width="520" height="340" rx="12" fill="#ecfeff" stroke="#0e7490" stroke-width="2"/>
+    <text x="532" y="70" text-anchor="middle" font-size="17" font-weight="700" fill="#155e75">RISK DECISION SERVICE</text>
+
+    <rect x="296" y="90" width="230" height="270" rx="9" fill="#ffffff" stroke="#0e7490" stroke-width="2"/>
+    <text x="411" y="118" text-anchor="middle" font-size="15" font-weight="700" fill="#155e75">DATA LAYER</text>
+    <text x="411" y="140" text-anchor="middle" font-size="12.5" fill="#155e75">100+ data points: own DynamoDB,</text>
+    <text x="411" y="157" text-anchor="middle" font-size="12.5" fill="#155e75">Nighthawk, model score, other services</text>
+    <text x="411" y="181" text-anchor="middle" font-size="12.5" fill="#155e75">every fetch fires immediately</text>
+    <text x="411" y="198" text-anchor="middle" font-size="12.5" fill="#155e75">as a Future, in parallel</text>
+    <text x="411" y="224" text-anchor="middle" font-size="12.5" font-weight="700" fill="#155e75">collection overlaps evaluation</text>
+    <text x="411" y="243" text-anchor="middle" font-size="12.5" fill="#155e75">instead of blocking on the</text>
+    <text x="411" y="262" text-anchor="middle" font-size="12.5" fill="#155e75">slowest source</text>
+    <text x="411" y="286" text-anchor="middle" font-size="12" font-style="italic" fill="#475569">rule flow blocks only when it</text>
+    <text x="411" y="302" text-anchor="middle" font-size="12" font-style="italic" fill="#475569">touches a value still in flight</text>
+    <text x="411" y="328" text-anchor="middle" font-size="12" fill="#155e75">annotations on the artifact's Java classes</text>
+    <text x="411" y="344" text-anchor="middle" font-size="12" fill="#155e75">declare the data; the service fetches it</text>
+
+    <line x1="526" y1="215" x2="540" y2="215" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="544" y="90" width="230" height="270" rx="9" fill="#ffffff" stroke="#0e7490" stroke-width="2"/>
+    <text x="659" y="118" text-anchor="middle" font-size="15" font-weight="700" fill="#155e75">DECISION ENGINE</text>
+    <text x="659" y="142" text-anchor="middle" font-size="12.5" fill="#0f4c5c">Drools rule flows</text>
+    <text x="659" y="161" text-anchor="middle" font-size="12.5" fill="#0f4c5c">(transaction, clearing, funding)</text>
+    <text x="659" y="185" text-anchor="middle" font-size="12.5" fill="#0f4c5c">+ ML fraud score as an input</text>
+    <text x="659" y="204" text-anchor="middle" font-size="12.5" fill="#0f4c5c">(US Patent 11,869,008)</text>
+    <text x="659" y="230" text-anchor="middle" font-size="12.5" fill="#0f4c5c">A/B experimentation at</text>
+    <text x="659" y="249" text-anchor="middle" font-size="12.5" fill="#0f4c5c">decision points, deterministic</text>
+    <text x="659" y="268" text-anchor="middle" font-size="12.5" fill="#0f4c5c">sticky per-merchant assignment</text>
+    <text x="659" y="296" text-anchor="middle" font-size="12" font-style="italic" fill="#475569">every verdict carries its rule</text>
+    <text x="659" y="314" text-anchor="middle" font-size="12" font-style="italic" fill="#475569">hits in the decision record</text>
+
+    <!-- Artifact manager: rule artifacts pulled into the engine, no redeploy -->
+    <rect x="296" y="412" width="230" height="64" rx="9" fill="#ecfeff" stroke="#0e7490" stroke-width="2"/>
+    <text x="411" y="438" text-anchor="middle" font-size="15" font-weight="700" fill="#155e75">ARTIFACT MANAGER</text>
+    <text x="411" y="460" text-anchor="middle" font-size="12.5" fill="#0f4c5c">versioned Drools rule artifacts</text>
+    <line x1="480" y1="412" x2="600" y2="342" stroke="#0e7490" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+    <text x="296" y="390" font-size="12" fill="#0e7490">engine polls every minute,</text>
+    <text x="296" y="405" font-size="12" fill="#0e7490">rules ship without a redeploy</text>
+
+    <!-- Kafka / case mgmt -->
+    <line x1="659" y1="380" x2="659" y2="408" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+    <text x="680" y="388" font-size="12.5" fill="#475569">decisions + data; violations;</text>
+    <text x="680" y="403" font-size="12.5" fill="#475569">policy (three topics)</text>
+    <rect x="544" y="412" width="230" height="64" rx="9" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+    <text x="659" y="438" text-anchor="middle" font-size="15" font-weight="700" fill="#78350f">KAFKA</text>
+    <text x="659" y="460" text-anchor="middle" font-size="12.5" fill="#92400e">three topics; migrated from ActiveMQ</text>
+
+    <!-- Policy topic: partner team's always-on streaming Spark computes long-running aggregates -->
+    <rect x="866" y="556" width="236" height="96" rx="9" fill="#f8fafc" stroke="#64748b" stroke-width="2" stroke-dasharray="7 4"/>
+    <text x="984" y="576" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a2332">PARTNER STREAMING SPARK</text>
+    <text x="984" y="592" text-anchor="middle" font-size="11.5" fill="#475569">always-on, fed by the SNS outcome topic</text>
+    <text x="984" y="607" text-anchor="middle" font-size="11.5" fill="#475569">writes long-running aggregates to</text>
+    <text x="984" y="622" text-anchor="middle" font-size="11.5" fill="#475569">the partner's own DynamoDB,</text>
+    <text x="984" y="637" text-anchor="middle" font-size="11.5" fill="#475569">which Nighthawk serves to us</text>
+    <line x1="1102" y1="604" x2="1124" y2="604" stroke="#334155" stroke-width="2" marker-end="url(#a)"/>
+    <rect x="1128" y="556" width="120" height="96" rx="9" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+    <text x="1188" y="586" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">PARTNER</text>
+    <text x="1188" y="603" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">DYNAMODB</text>
+    <text x="1188" y="622" text-anchor="middle" font-size="11.5" fill="#334155">other AWS account,</text>
+    <text x="1188" y="637" text-anchor="middle" font-size="11.5" fill="#334155">read by Nighthawk</text>
+
+    <!-- Shadow validation loop: prod decisions replayed against the candidate artifact in STG -->
+    <line x1="659" y1="476" x2="659" y2="562" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+    <text x="668" y="552" font-size="12" fill="#475569">decisions topic</text>
+    <rect x="544" y="566" width="230" height="64" rx="9" fill="#ecfeff" stroke="#0e7490" stroke-width="2"/>
+    <text x="659" y="592" text-anchor="middle" font-size="15" font-weight="700" fill="#155e75">DECISION DATA TOOLS</text>
+    <text x="659" y="614" text-anchor="middle" font-size="12.5" fill="#0f4c5c">replays prod decisions</text>
+
+    <line x1="544" y1="598" x2="530" y2="598" stroke="#c2410c" stroke-width="2.5" marker-end="url(#a)"/>
+    <rect x="266" y="566" width="260" height="64" rx="9" fill="#ecfeff" stroke="#0e7490" stroke-width="2" stroke-dasharray="7 4"/>
+    <text x="396" y="588" text-anchor="middle" font-size="14" font-weight="700" fill="#155e75">STG RISK DECISION SERVICE</text>
+    <text x="396" y="606" text-anchor="middle" font-size="12" fill="#0f4c5c">candidate artifact on the same prod data,</text>
+    <text x="396" y="621" text-anchor="middle" font-size="12" fill="#0f4c5c">no refetch; compare verdicts before promote</text>
+    <line x1="411" y1="476" x2="411" y2="562" stroke="#0e7490" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+    <text x="420" y="552" font-size="12" fill="#0e7490">candidate artifact</text>
+
+    <line x1="774" y1="444" x2="876" y2="444" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+    <text x="800" y="431" text-anchor="middle" font-size="12" fill="#475569">violations topic</text>
+    <rect x="880" y="398" width="210" height="110" rx="9" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+    <text x="985" y="426" text-anchor="middle" font-size="15" font-weight="700" fill="#1a2332">CASE MANAGEMENT</text>
+    <text x="985" y="449" text-anchor="middle" font-size="12.5" fill="#475569">review cases for fraud ops</text>
+    <text x="985" y="468" text-anchor="middle" font-size="12.5" fill="#475569">actions: merchant suspension</text>
+    <text x="985" y="487" text-anchor="middle" font-size="12.5" fill="#475569">real-time / near-real-time / funding</text>
+
+    <!-- Offline platform -->
+    <rect x="880" y="60" width="210" height="150" rx="9" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+    <text x="985" y="88" text-anchor="middle" font-size="15" font-weight="700" fill="#1a2332">OFFLINE RISK DATA</text>
+    <text x="985" y="112" text-anchor="middle" font-size="12.5" fill="#475569">Spark + Scala on EMR,</text>
+    <text x="985" y="131" text-anchor="middle" font-size="12.5" fill="#475569">Databricks</text>
+    <text x="985" y="153" text-anchor="middle" font-size="12.5" fill="#475569">reads the decision store</text>
+    <text x="985" y="175" text-anchor="middle" font-size="12.5" fill="#475569">risk analytics</text>
+
+    <!-- Decision store -->
+    <rect x="880" y="246" width="210" height="76" rx="9" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+    <text x="985" y="270" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">DYNAMODB (risk-owned)</text>
+    <text x="985" y="291" text-anchor="middle" font-size="12.5" fill="#334155">decision store (every verdict + data)</text>
+    <text x="985" y="308" text-anchor="middle" font-size="12.5" fill="#334155">+ short-term aggregates</text>
+    <line x1="792" y1="282" x2="876" y2="282" stroke="#334155" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+    <text x="834" y="272" text-anchor="middle" font-size="12" fill="#334155">write / read</text>
+    <line x1="985" y1="246" x2="985" y2="214" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+    <text x="1000" y="236" font-size="12" fill="#475569">Spark reads</text>
+
+    <text x="625" y="713" text-anchor="middle" font-size="13.5" font-style="italic" fill="#475569">Hot path left to right in-SLA; everything below and right of the decision engine is asynchronous.</text>
+  </svg>
+  </div>
+  <div class="foot"><span>Spring Boot on AWS/Kubernetes, 40 pods serving production; RDS PostgreSQL, DynamoDB, SNS/SQS</span><span>2 / 3</span></div>
+</section>
+
+<!-- SLIDE 3 -->
+<section class="slide">
+  <h2>Decisions, trade-offs, outcomes</h2>
+  <div class="cols">
+    <div class="col">
+      <h3>1. Overlap, don't prefetch</h3>
+      <ul class="colist">
+        <li><b>Problem:</b> fetch-then-evaluate with 100+ data points could not make the SLA.</li>
+        <li><b>Chosen:</b> every fetch fires as a Future at once; rules block only on values they touch.</li>
+        <li><b>Rejected:</b> a prefetch cache (stale fraud signals are a risk decision) and fewer data points (accuracy pays for the platform).</li>
+        <li><b>Moved the decision store and short-term aggregates from self-managed Cassandra to DynamoDB:</b> Cassandra's TP99 tail was hurting the hot path; DynamoDB fixed it, at the price of Spark paying per read. Long-running aggregates came from a partner team's always-on streaming Spark, written to a DynamoDB in another AWS account and served to us by Nighthawk, a partner service the data layer calls like the model scoring service.</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>2. Rules plus ML, not either</h3>
+      <ul class="colist">
+        <li><b>Rules:</b> analysts respond to new fraud patterns same-day. Artifacts ship through an artifact manager the engine polls every minute, no redeploy, and declare the data a rule flow needs as annotations on their Java classes; the service turns those into the fetches. Every verdict carries its trace.</li>
+        <li><b>Ground truth closes the loop:</b> the processor can still decline what risk approved; PayAuth publishes the outcome to SNS, Risk Data Tools reads it from a subscribed SQS queue and writes it into the decision record, so labels and backtests see what actually happened.</li>
+        <li><b>ML:</b> a separate scoring service, called by the data layer with the merchant key and transaction fields; it keeps its own per-merchant aggregates and its models train on the same decision data we publish. Its score is one more input to the rules.</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>3. Rollout safety as architecture</h3>
+      <ul class="colist">
+        <li><b>Shadow validation before promote:</b> every prod decision is published with its rule data; Decision Data Tools replays it against the candidate artifact in staging, same data, no refetch, and compares verdicts.</li>
+        <li><b>Sticky per-merchant A/B</b> for the live rollout: a new rule runs for a set percentage of merchants, and the assignment is deterministic, so a merchant lands in the same bucket every time.</li>
+        <li><b>ActiveMQ to Kafka,</b> separate topics for decisions, rule violations, and policy: replay and fan-out without coupling the consumers (validation, case management, a partner team's streaming aggregates).</li>
+        <li><b>Fail open:</b> if the risk service is down, transactions still process. The cost is a window of higher fraud exposure; the alternative was stopping payments.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="outcomes">
+    <b>Outcomes:</b> SLA held at 300M+ transactions/year; system contributed to $5B+ per year in prevented fraud losses; design survived a full ownership handoff to a new team, which runs it today.
+  </div>
+  <div class="foot"><span>What I would do differently: discussed live</span><span>3 / 3</span></div>
+</section>
+
+<div class="nav">
+  <button type="button" id="prev">&#9664; Prev</button>
+  <span id="counter">1 / 3</span>
+  <button type="button" id="next">Next &#9654;</button>
+</div>
+<div class="hint">arrow keys or the buttons to advance; Ctrl+P for PDF</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const counter = document.getElementById('counter');
+  let i = 0;
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, j) => s.classList.toggle('active', j === i));
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(i + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(i - 1); }
+  });
+  document.getElementById('next').addEventListener('click', e => { e.stopPropagation(); show(i + 1); });
+  document.getElementById('prev').addEventListener('click', e => { e.stopPropagation(); show(i - 1); });
+  document.addEventListener('click', e => { if (!e.target.closest('.nav')) show(i + 1); });
+  show(0);
+</script>
+</body>
+</html>
